@@ -20,6 +20,6 @@ jobs:
         shell: pwsh
         run: ./build.ps1 -Publish
 
-      - name: Smoke test
+      - name: Smoke test (offline)
         shell: pwsh
-        run: ./publish/cli/everything-mcp.exe --smoke-test
+        run: ./publish/cli/everything-mcp.exe --smoke-test-offline

@@ -12,6 +12,11 @@ if (!OperatingSystem.IsWindows())
     return 1;
 }
 
+if (args.Contains("--smoke-test-offline", StringComparer.OrdinalIgnoreCase))
+{
+    return RunOfflineSmokeTest();
+}
+
 if (args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase))
 {
     return RunSmokeTest();
@@ -31,6 +36,20 @@ builder.Services
 
 await builder.Build().RunAsync();
 return 0;
+
+static int RunOfflineSmokeTest()
+{
+    var dllPath = Path.Combine(AppContext.BaseDirectory, "Everything64.dll");
+    var ok = File.Exists(dllPath);
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        ok,
+        mode = "offline",
+        sdk_dll = dllPath,
+        dotnet = Environment.Version.ToString(),
+    }));
+    return ok ? 0 : 1;
+}
 
 static int RunSmokeTest()
 {
