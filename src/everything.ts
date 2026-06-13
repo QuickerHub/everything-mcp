@@ -31,11 +31,39 @@ const COMMON_ES_PATHS = [
     : undefined,
 ].filter((value): value is string => Boolean(value));
 
+function resolveEsFromPath(): string | undefined {
+  const result = spawnSync("where", ["es"], {
+    encoding: "utf8",
+    windowsHide: true,
+    shell: true,
+  });
+
+  if (result.status !== 0) {
+    return undefined;
+  }
+
+  const first = (result.stdout ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+
+  if (first && fs.existsSync(first)) {
+    return first;
+  }
+
+  return undefined;
+}
+
 export function resolveEsExe(): string {
   for (const candidate of COMMON_ES_PATHS) {
     if (fs.existsSync(candidate)) {
       return candidate;
     }
+  }
+
+  const fromPath = resolveEsFromPath();
+  if (fromPath) {
+    return fromPath;
   }
 
   throw new Error(

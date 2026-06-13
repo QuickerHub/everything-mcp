@@ -13,11 +13,18 @@ Cursor and other agents only index the **current workspace**. When you work acro
 ## Prerequisites
 
 1. **Windows**
-2. [Everything](https://www.voidtools.com/) installed and **running** (tray icon visible)
-3. Everything CLI `es.exe` available (ships with Everything; usually in the install folder)
+2. [Everything](https://www.voidtools.com/) installed and **running in the tray** (GUI client must be up; service alone is not enough for `es.exe`)
+3. Everything CLI `es.exe` on PATH (install `voidtools.Everything.Cli` via winget, or set `EVERYTHING_ES_PATH`)
 4. Node.js 18+
 
-Optional: set `EVERYTHING_ES_PATH` if `es.exe` is not in a default location.
+First-time setup:
+
+```powershell
+winget install voidtools.Everything
+winget install voidtools.Everything.Cli
+# Start Everything tray client (required for IPC)
+Start-Process "C:\Program Files\Everything\Everything.exe" "-startup"
+```
 
 ## MCP config
 
