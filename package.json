@@ -1,11 +1,11 @@
 {
   "name": "@quickerhub/everything-mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "MCP server for fast cross-project file search via voidtools Everything SDK (Windows)",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "everything-mcp": "./bin/everything-mcp.js"
+    "everything-mcp": "bin/everything-mcp.js"
   },
   "files": [
     "bin",
@@ -23,7 +23,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/QuickerHub/everything-mcp.git"
+    "url": "git+https://github.com/QuickerHub/everything-mcp.git"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "mcp",
