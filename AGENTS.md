@@ -1,23 +1,23 @@
 # everything-mcp (Agent notes)
 
-MCP server: `@quickerhub/everything-mcp` — Windows file search via Everything `es.exe`.
+.NET MCP server using bundled `Everything64.dll` (voidtools SDK IPC client).
 
-## When to use
+## Requires
 
-- User asks to find a file/folder **outside the current workspace**
-- Cross-project paths under `D:\source\repos\...`
-- Fast filename/path lookup (not semantic code search)
+- Windows + .NET 8 runtime
+- Everything.exe installed and running (tray). `auto_start: true` on `search` can launch it.
 
-## When not to use
+## Does NOT use
 
-- Code semantics inside current repo → use SemanticSearch / Grep
-- Non-Windows platforms → not supported yet
+- `es.exe` CLI
+- Node search implementation (removed in v0.2)
 
-## Setup check
+## Tools
 
-Call `status` first. If it fails, tell the user to install and run Everything.
+- `search` → JSON with `path`, `name`, `size`, `modified`, `is_folder`
+- `status` → SDK DLL path + Everything install/running state
 
-## Common scopes
+## Cross-project scopes
 
 ```
 scope_path: D:\source\repos\quicker
@@ -26,6 +26,6 @@ query: quicker-rpc
 query: ext:cs QuickerUtil
 ```
 
-## Repo
+## Local exe
 
-https://github.com/QuickerHub/everything-mcp
+`publish/cli/everything-mcp.exe` after `.\build.ps1 -Publish`

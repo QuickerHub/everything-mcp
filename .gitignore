@@ -1,5 +1,9 @@
 node_modules/
 dist/
-*.log
+publish/cli/
+src/EverythingMcp/bin/
+src/EverythingMcp/obj/
+*.user
+*.suo
 .DS_Store
 .env

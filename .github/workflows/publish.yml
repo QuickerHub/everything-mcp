@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Package version (e.g. 0.1.0)
+        description: Package version (e.g. 0.2.0)
         required: true
         type: string
 
@@ -15,15 +15,18 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
-          cache: npm
 
       - name: Resolve version
         id: version
@@ -49,10 +52,11 @@ jobs:
             echo "Package version already $TARGET"
           fi
 
-      - run: npm ci
-      - run: npm run build
+      - name: Build .NET MCP server
+        shell: pwsh
+        run: ./build.ps1 -Publish
 
-      - name: Publish
+      - name: Publish to npm
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

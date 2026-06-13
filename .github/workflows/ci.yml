@@ -8,15 +8,18 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-dotnet@v4
         with:
-          node-version: 20
-          cache: npm
+          dotnet-version: 8.0.x
 
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
+      - name: Build
+        shell: pwsh
+        run: ./build.ps1 -Publish
+
+      - name: Smoke test
+        shell: pwsh
+        run: ./publish/cli/everything-mcp.exe --smoke-test

@@ -2,33 +2,53 @@
 
 Fast cross-project file search for AI agents via [voidtools Everything](https://www.voidtools.com/) on Windows.
 
-Published by [QuickerHub](https://github.com/QuickerHub). Use with Cursor, Claude Desktop, VS Code Copilot, Windsurf, and other MCP hosts.
+Uses the **Everything SDK DLL** (same approach as QuickerPc), not `es.exe`.
 
-## Why
+Published by [QuickerHub](https://github.com/QuickerHub).
 
-Cursor and other agents only index the **current workspace**. When you work across many repos under `D:\source\repos`, built-in Glob/SemanticSearch often cannot find directories in other projects.
+## Architecture
 
-`everything-mcp` exposes Everything's indexed search to agents so they can locate files and folders in milliseconds across the whole machine.
+```
+Cursor / Claude / VS Code
+  → everything-mcp.exe (MCP stdio)
+  → Everything64.dll (bundled SDK IPC client)
+  → Everything.exe (user-installed tray client + index engine)
+```
+
+The bundled DLL is only an IPC client. **Everything.exe must be installed and running** to maintain the file index.
 
 ## Prerequisites
 
-1. **Windows**
-2. [Everything](https://www.voidtools.com/) installed and **running in the tray** (GUI client must be up; service alone is not enough for `es.exe`)
-3. Everything CLI `es.exe` on PATH (install `voidtools.Everything.Cli` via winget, or set `EVERYTHING_ES_PATH`)
-4. Node.js 18+
+1. **Windows x64**
+2. [.NET 8 Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
+3. [Everything](https://www.voidtools.com/) 1.4.x installed (stable). Tray client should be running.
+4. Node.js 18+ (only for `npx` launcher)
 
-First-time setup:
-
-```powershell
-winget install voidtools.Everything
-winget install voidtools.Everything.Cli
-# Start Everything tray client (required for IPC)
-Start-Process "C:\Program Files\Everything\Everything.exe" "-startup"
-```
+No `es.exe` / ES CLI required.
 
 ## MCP config
 
-### Cursor / Claude Desktop (`mcpServers`)
+### Direct exe (recommended for local dev)
+
+```json
+{
+  "mcpServers": {
+    "everything-search": {
+      "command": "D:\\source\\repos\\quicker\\everything-mcp\\publish\\cli\\everything-mcp.exe",
+      "args": []
+    }
+  }
+}
+```
+
+Build first:
+
+```powershell
+cd D:\source\repos\quicker\everything-mcp
+.\build.ps1 -Publish
+```
+
+### npm launcher
 
 ```json
 {
@@ -41,30 +61,13 @@ Start-Process "C:\Program Files\Everything\Everything.exe" "-startup"
 }
 ```
 
-### VS Code Copilot (`servers`)
+Override exe path:
 
 ```json
 {
-  "servers": {
-    "everything-search": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@quickerhub/everything-mcp"]
-    }
+  "env": {
+    "EVERYTHING_MCP_EXE": "D:\\path\\to\\everything-mcp.exe"
   }
-}
-```
-
-### Global install
-
-```powershell
-npm install -g @quickerhub/everything-mcp
-```
-
-```json
-{
-  "command": "everything-mcp",
-  "args": []
 }
 ```
 
@@ -72,61 +75,55 @@ npm install -g @quickerhub/everything-mcp
 
 | Tool | Description |
 |------|-------------|
-| `search` | Search files/folders via Everything index |
-| `status` | Check `es.exe` resolution and CLI availability |
+| `search` | Search files/folders via Everything index (returns JSON) |
+| `status` | Check bundled SDK DLL and Everything client state |
 
 ### `search` parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | string | Everything query (wildcards, `ext:`, `path:`, etc.) |
-| `max_results` | number | Default 100, max 1000 |
-| `scope_path` | string | Limit to folder subtree |
-| `match_path` | boolean | Match full path |
-| `match_case` | boolean | Case-sensitive |
-| `files_only` | boolean | Files only |
-| `folders_only` | boolean | Folders only |
+| Parameter | Description |
+|-----------|-------------|
+| `query` | Everything query (`ext:cs`, wildcards, etc.) |
+| `max_results` | Default 100, max 1000 |
+| `scope_path` | Limit to folder subtree |
+| `match_path` | Match full path |
+| `match_case` | Case-sensitive |
+| `match_whole_word` | Whole words only |
+| `regex` | Regex mode |
+| `sort_by` | `name_asc`, `date_modified_desc`, ... |
+| `auto_start` | Try starting Everything tray client (default true) |
 
-### Example queries
+### Example
 
-```
-quicker-rpc
-ext:cs path:D:\source\repos\quicker
-*.slnx
-CeaQuickerTools QuickerUtil
+```json
+{
+  "query": "quicker-rpc",
+  "scope_path": "D:\\source\\repos\\quicker",
+  "max_results": 20
+}
 ```
 
 ## Development
 
 ```powershell
-cd D:\source\repos\quicker\everything-mcp
-npm install
-npm run build
-npm start
+.\build.ps1          # build only
+.\build.ps1 -Publish # publish to publish/cli
+.\publish\cli\everything-mcp.exe --smoke-test
 ```
 
-Debug with MCP Inspector:
+## Comparison with QuickerPc
 
-```powershell
-npx @modelcontextprotocol/inspector node dist/index.js
-```
-
-## Publish
-
-npm package releases are triggered by GitHub Release tags (`v*`) via `.github/workflows/publish.yml`.
-
-```powershell
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Requires `NPM_TOKEN` secret on the `QuickerHub/everything-mcp` repository.
+| | QuickerPc | everything-mcp |
+|--|-----------|----------------|
+| SDK DLL | `Everything64.dll` bundled | same |
+| Everything.exe | user-installed, required | same |
+| IPC | P/Invoke | P/Invoke |
+| es.exe | not used | not used |
 
 ## Related
 
-- [QuickerHub/quicker-rpc](https://github.com/QuickerHub/quicker-rpc) — Quicker action authoring MCP (`@quickerhub/qkrpc-mcp`)
-- [voidtools Everything](https://www.voidtools.com/) — indexed file search engine
+- [QuickerHub/quicker-rpc](https://github.com/QuickerHub/quicker-rpc)
+- [voidtools SDK](https://www.voidtools.com/support/everything/sdk/)
 
 ## License
 
-MIT
+MIT. Everything SDK DLL is from voidtools (public SDK); not affiliated with voidtools.
