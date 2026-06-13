@@ -110,6 +110,26 @@ Override exe path:
 .\publish\cli\everything-mcp.exe --smoke-test
 ```
 
+## Release
+
+**Latest:** https://github.com/QuickerHub/everything-mcp/releases/latest
+
+```powershell
+.\publish\Publish-GitHubRelease.ps1 -Version 0.2.0
+gh release create v0.2.0 --title "v0.2.0" artifacts/*
+```
+
+### npm (`@quickerhub/everything-mcp`)
+
+Requires `NPM_TOKEN` repo secret (npm automation token with publish access to `@quickerhub`).
+
+```powershell
+gh secret set NPM_TOKEN --repo QuickerHub/everything-mcp
+gh workflow run publish.yml --repo QuickerHub/everything-mcp -f version=0.2.0
+```
+
+Creating a GitHub Release also triggers the npm publish workflow automatically.
+
 ## Comparison with QuickerPc
 
 | | QuickerPc | everything-mcp |
