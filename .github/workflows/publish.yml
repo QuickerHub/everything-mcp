@@ -39,7 +39,15 @@ jobs:
           echo "Publishing version: $VERSION"
 
       - name: Set package version
-        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+        shell: bash
+        run: |
+          TARGET="${{ steps.version.outputs.version }}"
+          CURRENT=$(node -p "require('./package.json').version")
+          if [ "$CURRENT" != "$TARGET" ]; then
+            npm version "$TARGET" --no-git-tag-version
+          else
+            echo "Package version already $TARGET"
+          fi
 
       - run: npm ci
       - run: npm run build
