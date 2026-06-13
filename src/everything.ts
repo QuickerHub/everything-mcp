@@ -74,17 +74,18 @@ export function resolveEsExe(): string {
   );
 }
 
-function buildSearchQuery(options: SearchOptions): string {
+function buildSearchQueryArgs(options: SearchOptions): string[] {
   const maxResults = clampMaxResults(options.maxResults);
   const trimmed = options.query.trim();
   if (!trimmed) {
     throw new Error("query must not be empty");
   }
 
-  return `count:${maxResults} ${trimmed}`;
+  // ES expects search terms as separate argv entries (shell would split them).
+  return [`count:${maxResults}`, ...trimmed.split(/\s+/).filter(Boolean)];
 }
 
-function buildEsArgs(esPath: string, options: SearchOptions): string[] {
+function buildEsArgs(options: SearchOptions): string[] {
   const maxResults = clampMaxResults(options.maxResults);
   const args = ["-n", String(maxResults)];
 
@@ -104,7 +105,7 @@ function buildEsArgs(esPath: string, options: SearchOptions): string[] {
     args.push("-path", options.scopePath.trim());
   }
 
-  args.push(buildSearchQuery(options));
+  args.push(...buildSearchQueryArgs(options));
   return args;
 }
 
@@ -125,7 +126,7 @@ export function searchFiles(options: SearchOptions): SearchResult {
   }
 
   const esPath = resolveEsExe();
-  const args = buildEsArgs(esPath, options);
+  const args = buildEsArgs(options);
   const result = spawnSync(esPath, args, {
     encoding: "utf8",
     windowsHide: true,
