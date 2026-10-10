@@ -76,30 +76,42 @@ Override exe path:
 | Tool | Description |
 |------|-------------|
 | `search` | Search files/folders via Everything index (returns JSON) |
-| `status` | Check bundled SDK DLL and Everything client state |
+| `status` | Check SDK DLL and Everything state; returns `install_guide` when not ready |
+| `install_guide` | Structured winget/manual install steps for Everything.exe |
 
-### `search` parameters
+### `search` parameters (agent-first)
 
-| Parameter | Description |
-|-----------|-------------|
-| `query` | Everything query (`ext:cs`, wildcards, etc.) |
-| `max_results` | Default 100, max 1000 |
-| `scope_path` | Limit to folder subtree |
-| `match_path` | Match full path |
-| `match_case` | Case-sensitive |
-| `match_whole_word` | Whole words only |
-| `regex` | Regex mode |
-| `sort_by` | `name_asc`, `date_modified_desc`, ... |
-| `auto_start` | Try starting Everything tray client (default true) |
+Prefer structured params over raw Everything `query`.
 
-### Example
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `name` | — | Filename (`QuickerUtil.cs`, `*.cs`) |
+| `extension` | — | Extension without dot (`cs`, `md`) |
+| `folder` | — | Search under this directory tree |
+| `path_contains` | — | Path must contain this text |
+| `kind` | `file` | `file`, `folder`, or `any` |
+| `query` | — | Advanced Everything syntax (optional) |
+| `scope_path` | — | Deprecated alias for `folder` |
+| `max_results` | 25 | Max 100 after filtering |
+| `apply_default_filters` | true | Skip `node_modules`, `.git`, caches, etc. |
+| `include_build_artifacts` | false | Include `bin`, `obj`, `dist`, `build`, `target` |
+| `include_hidden` | false | Include `.vs`, `.cache`, etc. |
+| `exclude` | — | Extra path segment names to skip |
+| `sort_by` | `date_modified_desc` | Sort order |
+| `auto_start` | true | Start Everything tray if needed |
+
+### Examples
 
 ```json
-{
-  "query": "quicker-rpc",
-  "scope_path": "D:\\source\\repos\\quicker",
-  "max_results": 20
-}
+{ "name": "QuickerUtil.cs", "folder": "D:\\source\\repos" }
+```
+
+```json
+{ "extension": "cs", "folder": "D:\\source\\repos\\clip\\CeaQuickerTools", "max_results": 10 }
+```
+
+```json
+{ "name": "quicker-rpc", "kind": "folder", "folder": "D:\\source\\repos\\quicker" }
 ```
 
 ## Development

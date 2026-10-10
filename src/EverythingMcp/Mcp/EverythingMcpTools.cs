@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using EverythingMcp.Agent;
 using EverythingMcp.Everything;
 using ModelContextProtocol.Server;
 
@@ -18,15 +19,33 @@ public sealed class EverythingMcpTools
 
     [McpServerTool(Name = "search")]
     [Description(
-        "Search files and folders using voidtools Everything index. "
-        + "Ideal for cross-project path discovery on Windows.")]
+        "Find files or folders on Windows using Everything. "
+        + "Agent-friendly: prefer name, extension, and folder instead of raw Everything query syntax.")]
     public Task<string> SearchAsync(
-        [Description("Everything search query. Supports wildcards, ext:, path:, folder:, etc.")]
-        string query,
-        [Description("Maximum number of results (default 100, max 1000).")]
-        int? max_results = null,
-        [Description("Limit search to this folder and its subfolders.")]
+        [Description("Filename to find. Supports wildcards (*, ?). Example: QuickerUtil.cs or *.cs")]
+        string? name = null,
+        [Description("File extension without dot. Example: cs, ts, md")]
+        string? extension = null,
+        [Description("Search only under this folder and subfolders. Example: D:\\source\\repos")]
+        string? folder = null,
+        [Description("Path must contain this text (filename or directory segment).")]
+        string? path_contains = null,
+        [Description("Result type: file (default), folder, or any.")]
+        string kind = "file",
+        [Description("Advanced raw Everything query. Use only when structured params are insufficient.")]
+        string? query = null,
+        [Description("Deprecated alias for folder.")]
         string? scope_path = null,
+        [Description("Maximum results after filtering (default 25, max 100).")]
+        int? max_results = null,
+        [Description("Apply default noise filters (node_modules, .git, build outputs, etc.). Default true.")]
+        bool apply_default_filters = true,
+        [Description("Include bin/obj/dist/build/target/artifacts folders. Default false.")]
+        bool include_build_artifacts = false,
+        [Description("Include hidden dot-directories like .vs and .cache. Default false.")]
+        bool include_hidden = false,
+        [Description("Extra path segment names to exclude.")]
+        string[]? exclude = null,
         [Description("Match against full path instead of filename only.")]
         bool? match_path = null,
         [Description("Case-sensitive search.")]
@@ -41,11 +60,6 @@ public sealed class EverythingMcpTools
         bool auto_start = true,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            throw new ArgumentException("query must not be empty.", nameof(query));
-        }
-
         if (auto_start)
         {
             EverythingProcess.EnsureRunning();
@@ -55,22 +69,79 @@ public sealed class EverythingMcpTools
             throw new EverythingIpcException();
         }
 
-        var searchQuery = BuildSearchQuery(query.Trim(), scope_path);
-        var maxCount = Math.Clamp(max_results ?? 100, 1, 1000);
+        var resolvedFolder = EverythingQueryBuilder.NormalizeFolder(folder)
+            ?? EverythingQueryBuilder.NormalizeFolder(scope_path);
+
+        var options = new EverythingSearchOptions
+        {
+            Name = name,
+            Extension = extension,
+            Folder = resolvedFolder,
+            PathContains = path_contains,
+            Query = query,
+            Kind = kind,
+            ApplyDefaultFilters = apply_default_filters,
+            IncludeBuildArtifacts = include_build_artifacts,
+            IncludeHidden = include_hidden,
+            ExtraExclude = exclude ?? [],
+        };
+
+        var searchQuery = EverythingQueryBuilder.Build(options);
+        var maxCount = Math.Clamp(max_results ?? 25, 1, 100);
+        var usePostFilter = apply_default_filters
+            || !include_build_artifacts
+            || !include_hidden
+            || (exclude?.Length ?? 0) > 0
+            || !string.Equals(kind, "any", StringComparison.OrdinalIgnoreCase);
 
         using var api = new EverythingApi
         {
-            MatchPath = match_path ?? false,
+            MatchPath = match_path ?? !string.IsNullOrWhiteSpace(path_contains),
             MatchCase = match_case ?? false,
             MatchWholeWord = match_whole_word ?? false,
             EnableRegex = regex ?? false,
             Sort = MapSort(sort_by),
         };
 
-        var results = api.Search(searchQuery, maxCount: (uint)maxCount, cancellationToken: cancellationToken);
+        List<EverythingFileInfo> results;
+        int rawCount;
+
+        if (!usePostFilter)
+        {
+            var rawResults = api.Search(searchQuery, maxCount: (uint)maxCount, cancellationToken: cancellationToken);
+            rawCount = rawResults.Count;
+            results = rawResults.ToList();
+        }
+        else
+        {
+            (results, rawCount) = SearchWithFiltering(
+                api,
+                searchQuery,
+                options,
+                maxCount,
+                cancellationToken);
+        }
+
         var payload = new
         {
             query = searchQuery,
+            params_used = new
+            {
+                name,
+                extension,
+                folder = resolvedFolder,
+                path_contains,
+                kind,
+                advanced_query = query,
+            },
+            filters = new
+            {
+                apply_default_filters,
+                include_build_artifacts,
+                include_hidden,
+                exclude = exclude ?? Array.Empty<string>(),
+            },
+            raw_count = rawCount,
             count = results.Count,
             results = results.Select(item => new
             {
@@ -86,37 +157,110 @@ public sealed class EverythingMcpTools
     }
 
     [McpServerTool(Name = "status")]
-    [Description("Check bundled Everything SDK DLL and installed Everything client availability.")]
+    [Description(
+        "Check bundled Everything SDK DLL and installed Everything client availability. "
+        + "When not ready, returns install_guide with winget/manual steps.")]
     public Task<string> StatusAsync()
     {
         var dllPath = Path.Combine(AppContext.BaseDirectory, "Everything64.dll");
+        var sdkExists = File.Exists(dllPath);
+        var installPath = EverythingProcess.ResolveInstallPath();
+        var installed = installPath is not null;
+        var running = EverythingProcess.IsRunning();
+        var guide = EverythingInstallGuide.Build(sdkExists, installed, running);
+
         var payload = new
         {
             platform = OperatingSystem.IsWindows() ? "windows" : "unsupported",
             sdk_dll = new
             {
                 path = dllPath,
-                exists = File.Exists(dllPath),
+                exists = sdkExists,
             },
             everything = new
             {
-                running = EverythingProcess.IsRunning(),
-                install_path = EverythingProcess.ResolveInstallPath(),
+                installed,
+                running,
+                install_path = installPath,
             },
+            guide,
+            cli_fallback = EverythingAgentSetup.BuildCliFallback(
+                EverythingAgentSetup.TryResolveExePathQuiet()),
+            agent_note = EverythingAgentSetup.BuildAgentNote(),
         };
 
         return Task.FromResult(JsonSerializer.Serialize(payload, JsonOptions));
     }
 
-    private static string BuildSearchQuery(string query, string? scopePath)
+    [McpServerTool(Name = "install_guide")]
+    [Description(
+        "Return structured Everything installation guidance for Windows. "
+        + "Use when status shows everything_not_installed or the user asks how to install Everything.")]
+    public Task<string> InstallGuideAsync()
     {
-        if (string.IsNullOrWhiteSpace(scopePath))
+        var dllPath = Path.Combine(AppContext.BaseDirectory, "Everything64.dll");
+        var sdkExists = File.Exists(dllPath);
+        var installPath = EverythingProcess.ResolveInstallPath();
+        var installed = installPath is not null;
+        var running = EverythingProcess.IsRunning();
+        var payload = EverythingInstallGuide.Build(sdkExists, installed, running);
+
+        return Task.FromResult(JsonSerializer.Serialize(payload, JsonOptions));
+    }
+
+    private static (List<EverythingFileInfo> Results, int RawCount) SearchWithFiltering(
+        EverythingApi api,
+        string searchQuery,
+        EverythingSearchOptions options,
+        int maxCount,
+        CancellationToken cancellationToken)
+    {
+        const int pageSize = 200;
+        const int maxPages = 5;
+
+        var accepted = new List<EverythingFileInfo>(maxCount);
+        var rawCount = 0;
+        uint offset = 0;
+
+        for (var page = 0; page < maxPages && accepted.Count < maxCount; page++)
         {
-            return query;
+            var batch = api.Search(
+                searchQuery,
+                offset: offset,
+                maxCount: pageSize,
+                cancellationToken: cancellationToken);
+
+            if (batch.Count == 0)
+            {
+                break;
+            }
+
+            rawCount += batch.Count;
+
+            foreach (var item in batch)
+            {
+                if (accepted.Count >= maxCount)
+                {
+                    break;
+                }
+
+                if (!EverythingResultFilter.Matches(item, options))
+                {
+                    continue;
+                }
+
+                accepted.Add(item);
+            }
+
+            if (batch.Count < pageSize)
+            {
+                break;
+            }
+
+            offset += pageSize;
         }
 
-        var normalizedScope = scopePath.Trim().TrimEnd('\\', '/');
-        return $"\"{normalizedScope}\" {query}";
+        return (accepted, rawCount);
     }
 
     private static uint MapSort(string? sortBy)
